@@ -8,12 +8,11 @@
 
 /* ---------- OPÇÃO A — Firebase (Firestore) ----------
    Console do Firebase -> Configurações do projeto -> Seus apps -> Configuração do SDK */
-// window.LAMOUR_NUVEM = {
-//   provedor: "firebase",
-//   projectId: "minha-loja-1234",
-//   apiKey: "AIzaSy...",
-//   storageBucket: "minha-loja-1234.firebasestorage.app"   // opcional (exige plano Blaze)
-// };
+ window.LAMOUR_NUVEM = {
+   provedor: "firebase",
+   projectId: "loja-lamour",
+   apiKey: "AIzaSyCI4xlEAv2gCZRVWkJelYMQz4-xtjM23jc"
+ };
 
 /* ---------- OPÇÃO B — Supabase (Postgres) ----------
    Painel do Supabase -> Project Settings -> API */

@@ -1,0 +1,35 @@
+/* ============================================================
+   L'amour Essência — regras do Firestore
+   Firebase Console -> Firestore Database -> Regras -> colar -> Publicar
+
+   TROQUE COLE_O_UID_AQUI pelo UID da administradora
+   (Authentication -> Users -> coluna "User UID").
+   Isso é importante: sem essa checagem, qualquer pessoa que criasse
+   uma conta no projeto conseguiria gravar no site.
+   Para liberar mais de uma pessoa, use:
+     request.auth.uid in ['UID_1', 'UID_2']
+   ============================================================ */
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function ehAdmin() {
+      return request.auth != null && request.auth.uid == 'COLE_O_UID_AQUI';
+    }
+
+    match /site_config/{doc} {
+      allow read: if true;
+      allow write: if ehAdmin();
+    }
+
+    match /produtos/{doc} {
+      allow read: if true;
+      allow write: if ehAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

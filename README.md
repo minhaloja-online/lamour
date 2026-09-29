@@ -1,6 +1,6 @@
 # L'amour Essência Moda e Variedades — site
 
-Site completo em HTML5, CSS3 e JavaScript puro, sem bibliotecas. Cinco telas em um arquivo só:
+Site completo em HTML5, CSS3 e JavaScript puro, sem bibliotecas nem build. Cinco telas em um arquivo só:
 
 | Tela | Endereço |
 |---|---|
@@ -16,9 +16,11 @@ Site completo em HTML5, CSS3 e JavaScript puro, sem bibliotecas. Cinco telas em 
 ├── css/style.css
 ├── js/script.js
 ├── dados/
-│   ├── nuvem.js        ← conexão com o banco compartilhado
-│   ├── conteudo.js     ← alternativa sem banco (opcional)
-│   └── supabase.sql    ← script que cria o banco
+│   ├── nuvem.js          ← conexão com o banco (Firebase ou Supabase)
+│   ├── firestore.rules   ← regras do Firestore
+│   ├── storage.rules     ← regras do Storage do Firebase (opcional)
+│   ├── supabase.sql      ← script do Supabase (alternativa)
+│   └── conteudo.js       ← alternativa sem banco nenhum
 ├── assets/
 └── README.md
 ```
@@ -27,69 +29,69 @@ Site completo em HTML5, CSS3 e JavaScript puro, sem bibliotecas. Cinco telas em 
 
 # ⭐ 1. Fazer as alterações valerem para todos
 
-Sem banco, o painel salva no navegador de quem editou — ninguém mais vê. Para o conteúdo valer para todos os visitantes, conecte o site a um banco na internet. Usamos o **Supabase**, que tem plano gratuito suficiente para uma loja.
+Sem banco, o painel salva no navegador de quem editou e mais ninguém vê. Para o conteúdo valer para todos os visitantes, conecte o site a um banco. O site fala com **Firebase (Firestore)** ou **Supabase** — escolha um.
 
-São cinco passos, uma vez só:
+## Opção A — Firebase / Firestore
 
 ### Passo 1 — Criar o projeto
-Entre em `supabase.com`, crie uma conta e um projeto novo. Anote a senha do banco que ele pedir (não é a mesma do painel).
+Em `console.firebase.google.com`, crie um projeto. Pode desativar o Google Analytics.
 
-### Passo 2 — Criar as tabelas
-No menu lateral, abra **SQL Editor → New query**, cole todo o conteúdo de `dados/supabase.sql` e clique em **Run**. Isso cria as tabelas, as permissões e a pasta de fotos.
+### Passo 2 — Criar o banco
+**Build → Firestore Database → Criar banco de dados.** Escolha a região mais perto (ex.: `southamerica-east1`) e inicie em **modo de produção** — as regras certas vêm no passo 4.
 
 ### Passo 3 — Criar o login da administradora
-Ainda no Supabase:
-- **Authentication → Users → Add user**: informe o e-mail e a senha que ela vai usar para entrar no painel. Marque *Auto Confirm User*.
-- **Authentication → Providers → Email**: desligue **"Allow new users to sign up"**, para que ninguém crie conta sozinho.
+**Build → Authentication → Começar → E-mail/senha → Ativar.** Depois **Users → Add user**: informe o e-mail e a senha que ela vai usar no painel. Copie o **User UID** que aparece na lista — ele é usado no passo seguinte.
 
-### Passo 4 — Pegar as duas chaves
-Em **Project Settings → API**, copie:
-- **Project URL** (algo como `https://abcdefgh.supabase.co`)
-- **anon public** (uma chave longa começando com `eyJ...`)
+### Passo 4 — Publicar as regras
+**Firestore Database → Regras.** Apague o que estiver lá, cole o conteúdo de `dados/firestore.rules`, troque `COLE_O_UID_AQUI` pelo UID copiado e clique em **Publicar**.
 
-A chave anon é pública de propósito: com ela só dá para **ler**. Gravar exige o login do passo 3.
+Essa troca é importante: a chave da API do Firebase fica visível no site (ela é pública por natureza) e, sem essa checagem, qualquer pessoa poderia criar uma conta no projeto e gravar no seu site. Com o UID fixo, só a conta da administradora escreve. Todo mundo lê.
 
-### Passo 5 — Ligar o site ao banco
-Abra `dados/nuvem.js`, descomente o bloco e cole as duas informações:
+### Passo 5 — Pegar as duas informações
+**Configurações do projeto (⚙️) → Seus apps.** Se ainda não houver um app Web, crie um (ícone `</>`, sem hospedagem). Na **Configuração do SDK** aparecem:
+
+- `projectId` — algo como `lamour-loja-1234`
+- `apiKey` — algo como `AIzaSy...`
+
+### Passo 6 — Ligar o site ao banco
+Abra `dados/nuvem.js`, descomente o bloco do Firebase e preencha:
 
 ```js
 window.LAMOUR_NUVEM = {
-  url: "https://abcdefgh.supabase.co",
-  anonKey: "eyJhbGciOi...",
-  bucket: "fotos"
+  provedor: "firebase",
+  projectId: "lamour-loja-1234",
+  apiKey: "AIzaSy..."
 };
 ```
 
-Suba a pasta para a hospedagem. Pronto: qualquer alteração feita no painel aparece para todo mundo, em qualquer aparelho, na hora que a pessoa abrir ou recarregar o site.
+Suba a pasta para a hospedagem. Pronto.
 
-> Atalho: você também pode colar essas duas informações direto no painel, em **Conexão**, clicar em *Salvar e conectar* e depois em **Gerar nuvem.js do site** — aí é só substituir o arquivo na hospedagem.
+### Sobre as fotos no Firebase
+O Cloud Storage do Firebase passou a exigir o plano Blaze (com cartão cadastrado). Dois caminhos:
+
+- **Sem Blaze** (recomendado para começar): não preencha `storageBucket`. Hospede as fotos onde já for conveniente — a própria pasta `assets/produtos/` do site serve — e cole o caminho no campo *"ou cole o endereço da imagem"* de cada produto.
+- **Com Blaze**: ative o Storage, publique `dados/storage.rules` (trocando o UID) e preencha `storageBucket` no `nuvem.js`. Aí o botão *Enviar foto* do painel passa a funcionar.
+
+## Opção B — Supabase
+
+Mesma ideia, cinco passos: criar o projeto em `supabase.com`; rodar `dados/supabase.sql` no **SQL Editor**; criar a administradora em **Authentication → Users** (e desligar *Allow new users to sign up* em **Providers → Email**); copiar **Project URL** e a chave **anon public** em **Project Settings → API**; preencher o bloco do Supabase em `dados/nuvem.js`.
+
+O envio de fotos pelo painel já funciona no plano gratuito. Em compensação, projetos gratuitos do Supabase são pausados após 7 dias sem nenhum acesso — qualquer visita ao site conta como acesso, e o projeto volta com um clique.
+
+> Atalho para as duas opções: cole as informações direto no painel, em **Conexão**, clique em *Salvar e conectar*, teste, e depois em **Gerar nuvem.js do site** — é só substituir o arquivo na hospedagem.
 
 ### Como fica o acesso ao painel
 
 | Situação | Como entra | O que acontece ao salvar |
 |---|---|---|
-| Nuvem conectada | e-mail + senha do Supabase | vale para todos os visitantes |
-| Sem nuvem | senha local (padrão `lamour2026`) | vale só naquele navegador |
-
-As fotos enviadas pelo painel também vão para a nuvem e ficam com endereço próprio — nada de imagem pesada guardada no navegador.
+| Com banco conectado | e-mail + senha criados no Firebase/Supabase | vale para todos os visitantes |
+| Sem banco | senha local (padrão `lamour2026`) | vale só naquele navegador |
 
 ---
 
 ## 2. Painel do administrador
 
-`#/admin`. Onze abas:
-
-- **Identidade** — nome, assinatura, emoji do ícone, logotipo, as sete cores, tema escuro automático, fontes.
-- **Início** — textos da primeira tela, foto principal, frase de impacto, faixa deslizante.
-- **Seções** — títulos e textos de cada bloco da home, cartões de cosméticos e moda, benefícios, sobre, chamadas, rodapé.
-- **Categorias** — criar, descrever, foto, mostrar/ocultar.
-- **Institucional** — capa, história, valores, galeria e convite final da página `#/sobre`.
-- **Contato** — WhatsApp e mensagem automática, telefone, e-mail, redes, endereço, Maps, horários linha a linha.
-- **Catálogo** — textos, mostrar ou esconder preços, senha local do painel.
-- **Pedidos** — textos do carrinho, primeira linha da mensagem do WhatsApp, aviso e o que perguntar ao cliente.
-- **Produtos** — nome, categoria, descrição, preço, preço anterior, etiquetas, ordem, foto, destaque na home, visível no catálogo.
-- **Conexão** — situação atual, conectar/testar a nuvem, gerar o `nuvem.js`, recarregar, sair da conta.
-- **Dados** — cópia de segurança, importação e o `conteudo.js`.
+`#/admin`. Onze abas: **Identidade** (nome, assinatura, emoji do ícone, logo, as sete cores, tema escuro automático, fontes), **Início**, **Seções**, **Categorias**, **Institucional**, **Contato**, **Catálogo**, **Pedidos**, **Produtos**, **Conexão** e **Dados**.
 
 Cores e fontes mudam ao vivo; **Salvar alterações** grava o resto. Produtos são salvos no próprio formulário.
 
@@ -109,20 +111,24 @@ Nome: Maria
 Entrega: Retirar na loja
 ```
 
-O carrinho fica salvo no navegador do cliente (é dele, não precisa ir para o banco). Produtos sem preço entram como "a confirmar na conversa". Não há pagamento nem estoque: a negociação acontece no WhatsApp.
+O carrinho fica no navegador do cliente (é dele, não precisa ir para o banco). Produtos sem preço entram como "a confirmar na conversa". Não há pagamento nem controle de estoque: a negociação acontece no WhatsApp.
 
-## 4. Imagens
+## 4. Como os dados ficam guardados
+
+No Firestore são duas coleções: `site_config` (um documento chamado `site`) e `produtos` (um documento por produto). O conteúdo vai num campo `dados` em JSON — no caso dos produtos, `nome` e `categoria` também ficam soltos, só para o documento ser legível no console. No Supabase são duas tabelas com uma coluna `jsonb`. Em qualquer um dos dois, **Dados → Exportar** baixa tudo num arquivo.
+
+## 5. Imagens
 
 Todo campo de foto aceita, nesta ordem: foto enviada pelo painel, endereço colado à mão, ou uma ilustração vetorial gerada pelo próprio site na paleta da marca. Nenhuma tela quebra por falta de imagem. Fotos enviadas são reduzidas a 1400px e comprimidas antes de subir.
 
-## 5. Publicação
+## 6. Publicação
 
-Site estático: Netlify, Vercel, GitHub Pages, Hostinger, cPanel. Nada para compilar. Antes de publicar, ajuste em `index.html` o `og:url`, o `og:image` e o bloco `application/ld+json` (acrescente `address` e `openingHours` quando estiverem definidos).
+Site estático: Netlify, Vercel, GitHub Pages, Hostinger, cPanel — ou o próprio Firebase Hosting, se já estiver usando Firebase. Nada para compilar. Antes de publicar, ajuste em `index.html` o `og:url`, o `og:image` e o bloco `application/ld+json` (acrescente `address` e `openingHours` quando estiverem definidos).
 
-## 6. Sem nuvem (alternativa simples)
+## 7. Sem banco nenhum (alternativa)
 
-Se preferir não criar banco nenhum: edite tudo no painel, vá em **Dados → Gerar conteudo.js do site** e substitua `dados/conteudo.js` na hospedagem. O conteúdo passa a valer para todos os visitantes — mas cada alteração exige subir o arquivo de novo. A nuvem existe justamente para evitar esse passo.
+Edite tudo no painel, vá em **Dados → Gerar conteudo.js do site** e substitua `dados/conteudo.js` na hospedagem. O conteúdo passa a valer para todos — mas cada alteração exige subir o arquivo de novo.
 
-## 7. O que continua em branco
+## 8. O que continua em branco
 
 Número do WhatsApp, endereço escrito, horários, redes sociais, preços, marcas e fotos reais. Nada foi inventado: cada um tem seu campo no painel.

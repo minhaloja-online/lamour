@@ -484,33 +484,90 @@ function paintArt(root = document){
 }
 
 /* ============================================================
-   NUVEM — banco compartilhado (Supabase via REST, sem bibliotecas)
+   NUVEM — banco compartilhado, sem bibliotecas externas.
+   Funciona com Supabase (Postgres) ou Firebase (Firestore).
    Configure em dados/nuvem.js ou pelo painel (aba Conexão).
    ============================================================ */
 const NUVEM = {
   cfg(){
-    let n = (typeof window.LAMOUR_NUVEM === 'object' && window.LAMOUR_NUVEM && window.LAMOUR_NUVEM.url) ? window.LAMOUR_NUVEM : null;
-    if (!n){
+    let n = (typeof window.LAMOUR_NUVEM === 'object' && window.LAMOUR_NUVEM) ? window.LAMOUR_NUVEM : null;
+    if (!n || (!n.url && !n.projectId)){
       try{ n = JSON.parse(localStorage.getItem('lamour.nuvem') || 'null'); }catch(e){ n = null; }
     }
-    if (!n || !n.url || !n.anonKey) return null;
-    return { url:String(n.url).replace(/\/+$/, ''), anonKey:n.anonKey, bucket:n.bucket || 'fotos' };
+    if (!n) return null;
+    const prov = n.provedor || (n.projectId ? 'firebase' : 'supabase');
+    if (prov === 'firebase'){
+      if (!n.projectId || !n.apiKey) return null;
+      return { provedor:'firebase', projectId:String(n.projectId).trim(), apiKey:String(n.apiKey).trim(),
+               storageBucket:(n.storageBucket || '').trim() };
+    }
+    if (!n.url || !n.anonKey) return null;
+    return { provedor:'supabase', url:String(n.url).replace(/\/+$/, ''), anonKey:String(n.anonKey).trim(), bucket:n.bucket || 'fotos' };
   },
+  provedor(){ const n = this.cfg(); return n ? n.provedor : null; },
+
+  /* ---------- sessão ---------- */
   token(){ try{ return JSON.parse(sessionStorage.getItem('lamour.token') || 'null'); }catch(e){ return null; } },
   setToken(t){ try{ t ? sessionStorage.setItem('lamour.token', JSON.stringify(t)) : sessionStorage.removeItem('lamour.token'); }catch(e){} },
-  logado(){ const t = this.token(); return !!(t && t.access_token); },
+  acesso(){ const t = this.token(); return t ? (t.access_token || t.idToken || t.id_token || '') : ''; },
+  atualizacao(){ const t = this.token(); return t ? (t.refresh_token || t.refreshToken || '') : ''; },
+  logado(){ return !!this.acesso(); },
   sair(){ this.setToken(null); },
 
-  async req(path, opts, auth){
+  async entrar(email, senha){
     const n = this.cfg();
     if (!n) throw new Error('Conexão não configurada.');
+    let r;
+    if (n.provedor === 'firebase'){
+      r = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + n.apiKey, {
+        method:'POST', headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify({ email:email, password:senha, returnSecureToken:true })
+      });
+    } else {
+      r = await fetch(n.url + '/auth/v1/token?grant_type=password', {
+        method:'POST', headers:{ apikey:n.anonKey, 'Content-Type':'application/json' },
+        body:JSON.stringify({ email:email, password:senha })
+      });
+    }
+    if (!r.ok) throw new Error('E-mail ou senha incorretos.');
+    this.setToken(await r.json());
+    return true;
+  },
+
+  async renovar(){
+    const n = this.cfg(), ref = this.atualizacao();
+    if (!n || !ref) return false;
+    let r;
+    if (n.provedor === 'firebase'){
+      r = await fetch('https://securetoken.googleapis.com/v1/token?key=' + n.apiKey, {
+        method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' },
+        body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(ref)
+      });
+    } else {
+      r = await fetch(n.url + '/auth/v1/token?grant_type=refresh_token', {
+        method:'POST', headers:{ apikey:n.anonKey, 'Content-Type':'application/json' },
+        body:JSON.stringify({ refresh_token:ref })
+      });
+    }
+    if (!r.ok){ this.setToken(null); return false; }
+    this.setToken(await r.json());
+    return true;
+  },
+
+  /* ---------- requisições ---------- */
+  async req(url, opts, auth){
     opts = opts || {};
-    const t = this.token();
-    const chave = (auth && t && t.access_token) ? t.access_token : n.anonKey;
-    const h = Object.assign({ apikey:n.anonKey, Authorization:'Bearer ' + chave }, opts.headers || {});
-    const r = await fetch(n.url + path, Object.assign({}, opts, { headers:h }));
-    if (r.status === 401 && auth && t && t.refresh_token){
-      if (await this.renovar()) return this.req(path, opts, auth);
+    const n = this.cfg();
+    const h = Object.assign({}, opts.headers || {});
+    if (n.provedor === 'supabase'){
+      h.apikey = n.anonKey;
+      h.Authorization = 'Bearer ' + ((auth && this.acesso()) || n.anonKey);
+    } else if (auth && this.acesso()){
+      h.Authorization = 'Bearer ' + this.acesso();
+    }
+    const r = await fetch(url, Object.assign({}, opts, { headers:h }));
+    if ((r.status === 401 || r.status === 403) && auth && this.atualizacao()){
+      if (await this.renovar()) return this.req(url, opts, auth);
     }
     if (!r.ok){
       const txt = await r.text().catch(() => '');
@@ -519,34 +576,141 @@ const NUVEM = {
     return r;
   },
 
-  async entrar(email, senha){
+  /* ---------- Firestore: documento <-> objeto ----------
+     Guardamos o conteúdo como JSON no campo "dados" (mais simples
+     e sem limite de aninhamento); nome e categoria vão soltos só
+     para o documento ficar legível no console do Firebase.        */
+  fsUrl(caminho){
     const n = this.cfg();
-    if (!n) throw new Error('Conexão não configurada.');
-    const r = await fetch(n.url + '/auth/v1/token?grant_type=password', {
-      method:'POST',
-      headers:{ apikey:n.anonKey, 'Content-Type':'application/json' },
-      body:JSON.stringify({ email:email, password:senha })
-    });
-    if (!r.ok) throw new Error('E-mail ou senha incorretos.');
-    this.setToken(await r.json());
-    return true;
+    return 'https://firestore.googleapis.com/v1/projects/' + n.projectId +
+           '/databases/(default)/documents' + caminho + (caminho.indexOf('?') >= 0 ? '&' : '?') + 'key=' + n.apiKey;
+  },
+  fsCampos(obj, extras){
+    const f = { dados:{ stringValue:JSON.stringify(obj) } };
+    Object.keys(extras || {}).forEach(k => { if (extras[k] != null) f[k] = { stringValue:String(extras[k]) }; });
+    return { fields:f };
+  },
+  fsLer(doc){
+    if (!doc || !doc.fields || !doc.fields.dados) return null;
+    try{ return JSON.parse(doc.fields.dados.stringValue || '{}'); }catch(e){ return null; }
   },
 
-  async renovar(){
-    const n = this.cfg(), t = this.token();
-    if (!n || !t || !t.refresh_token) return false;
-    const r = await fetch(n.url + '/auth/v1/token?grant_type=refresh_token', {
+  /* ---------- leitura ---------- */
+  async lerConfig(){
+    const n = this.cfg();
+    if (n.provedor === 'firebase'){
+      const r = await fetch(this.fsUrl('/site_config/site'));
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error('Nuvem (' + r.status + ')');
+      return this.fsLer(await r.json());
+    }
+    const r = await this.req(n.url + '/rest/v1/site_config?id=eq.1&select=dados');
+    const j = await r.json();
+    return (j[0] && j[0].dados) ? j[0].dados : null;
+  },
+
+  async lerProdutos(){
+    const n = this.cfg();
+    if (n.provedor === 'firebase'){
+      const lista = [];
+      let pagina = '';
+      for (let i = 0; i < 20; i++){
+        const r = await fetch(this.fsUrl('/produtos?pageSize=300' + (pagina ? '&pageToken=' + encodeURIComponent(pagina) : '')));
+        if (r.status === 404) break;
+        if (!r.ok) throw new Error('Nuvem (' + r.status + ')');
+        const j = await r.json();
+        (j.documents || []).forEach(d => {
+          const dados = this.fsLer(d);
+          if (dados) lista.push(Object.assign({ id:String(d.name).split('/').pop() }, dados));
+        });
+        pagina = j.nextPageToken || '';
+        if (!pagina) break;
+      }
+      return lista;
+    }
+    const r = await this.req(n.url + '/rest/v1/produtos?select=id,dados');
+    const j = await r.json();
+    return j.map(x => Object.assign({ id:x.id }, x.dados || {}));
+  },
+
+  /* ---------- gravação ---------- */
+  async gravarConfig(data){
+    const n = this.cfg();
+    if (n.provedor === 'firebase'){
+      await this.req(this.fsUrl('/site_config/site'), {
+        method:'PATCH', headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify(this.fsCampos(data, { atualizadoEm:new Date().toISOString() }))
+      }, true);
+      return;
+    }
+    await this.req(n.url + '/rest/v1/site_config', {
       method:'POST',
-      headers:{ apikey:n.anonKey, 'Content-Type':'application/json' },
-      body:JSON.stringify({ refresh_token:t.refresh_token })
-    });
-    if (!r.ok){ this.setToken(null); return false; }
-    this.setToken(await r.json());
-    return true;
+      headers:{ 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' },
+      body:JSON.stringify([{ id:1, dados:data }])
+    }, true);
+  },
+
+  async gravarProduto(p){
+    const n = this.cfg();
+    const corpo = clone(p); delete corpo.id;
+    if (n.provedor === 'firebase'){
+      await this.req(this.fsUrl('/produtos/' + encodeURIComponent(p.id)), {
+        method:'PATCH', headers:{ 'Content-Type':'application/json' },
+        body:JSON.stringify(this.fsCampos(corpo, { nome:p.nome, categoria:p.categoria }))
+      }, true);
+      return;
+    }
+    await this.req(n.url + '/rest/v1/produtos', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' },
+      body:JSON.stringify([{ id:p.id, dados:corpo }])
+    }, true);
+  },
+
+  async apagarProduto(id){
+    const n = this.cfg();
+    if (n.provedor === 'firebase'){
+      await this.req(this.fsUrl('/produtos/' + encodeURIComponent(id)), { method:'DELETE' }, true);
+      return;
+    }
+    await this.req(n.url + '/rest/v1/produtos?id=eq.' + encodeURIComponent(id), { method:'DELETE' }, true);
+  },
+
+  /* ---------- imagens ---------- */
+  async subirImagem(blob, dataUrl){
+    const n = this.cfg();
+    const nome = 'img-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg';
+    if (n.provedor === 'firebase'){
+      if (!n.storageBucket){
+        if (!dataUrl) throw new Error('Configure o bucket do Storage para enviar fotos.');
+        if (dataUrl.length > 700000) throw new Error('Sem Storage configurado, a foto precisa ser menor. Cole o endereço de uma imagem hospedada.');
+        return dataUrl;
+      }
+      const caminho = 'fotos/' + nome;
+      const r = await this.req('https://firebasestorage.googleapis.com/v0/b/' + n.storageBucket +
+                               '/o?uploadType=media&name=' + encodeURIComponent(caminho), {
+        method:'POST', headers:{ 'Content-Type':'image/jpeg' }, body:blob
+      }, true);
+      const j = await r.json();
+      const tk = (j.downloadTokens || '').split(',')[0];
+      return 'https://firebasestorage.googleapis.com/v0/b/' + n.storageBucket + '/o/' +
+             encodeURIComponent(caminho) + '?alt=media' + (tk ? '&token=' + tk : '');
+    }
+    await this.req(n.url + '/storage/v1/object/' + n.bucket + '/' + nome, {
+      method:'POST', headers:{ 'Content-Type':'image/jpeg', 'x-upsert':'true' }, body:blob
+    }, true);
+    return n.url + '/storage/v1/object/public/' + n.bucket + '/' + nome;
   },
 
   async testar(){
-    const r = await this.req('/rest/v1/site_config?select=id&limit=1');
+    const n = this.cfg();
+    if (!n) throw new Error('Conexão não configurada.');
+    if (n.provedor === 'firebase'){
+      const r = await fetch(this.fsUrl('/site_config/site'));
+      if (r.ok || r.status === 404) return true;
+      throw new Error('Nuvem (' + r.status + ')');
+    }
+    const r = await this.req(n.url + '/rest/v1/site_config?select=id&limit=1');
     await r.json();
     return true;
   }
@@ -612,13 +776,11 @@ const Store = {
 
   async initNuvem(){
     try{
-      const r = await NUVEM.req('/rest/v1/site_config?id=eq.1&select=dados');
-      const j = await r.json();
+      const cfg = await NUVEM.lerConfig();
       this.modo = 'nuvem';
-      if (j[0] && j[0].dados) this.data = mergeDeep(clone(DEFAULT_DATA), j[0].dados);
-      const rp = await NUVEM.req('/rest/v1/produtos?select=id,dados');
-      const jp = await rp.json();
-      this.produtos = jp.map(x => Object.assign({ id:x.id }, x.dados || {}));
+      this.erroNuvem = null;
+      if (cfg) this.data = mergeDeep(clone(DEFAULT_DATA), cfg);
+      this.produtos = await NUVEM.lerProdutos();
       this.podeEditar = NUVEM.logado();
       this.onChange && this.onChange('tudo');
     }catch(e){
@@ -635,11 +797,7 @@ const Store = {
   async salvarConfig(data){
     this.data = data;
     if (this.modo === 'nuvem'){
-      await NUVEM.req('/rest/v1/site_config', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' },
-        body:JSON.stringify([{ id:1, dados:clone(data) }])
-      }, true);
+      await NUVEM.gravarConfig(clone(data));
     } else if (this.modo === 'db' && this.db){
       await this.db.doc('config/site').set(clone(data));
     } else {
@@ -651,12 +809,7 @@ const Store = {
     const i = this.produtos.findIndex(x => x.id === p.id);
     if (i >= 0) this.produtos[i] = p; else this.produtos.push(p);
     if (this.modo === 'nuvem'){
-      const body = clone(p); delete body.id;
-      await NUVEM.req('/rest/v1/produtos', {
-        method:'POST',
-        headers:{ 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' },
-        body:JSON.stringify([{ id:p.id, dados:body }])
-      }, true);
+      await NUVEM.gravarProduto(p);
     } else if (this.modo === 'db' && this.db){
       const body = clone(p); delete body.id;
       await this.db.collection('produtos').doc(p.id).set(body);
@@ -667,7 +820,7 @@ const Store = {
 
   async removerProduto(id){
     this.produtos = this.produtos.filter(p => p.id !== id);
-    if (this.modo === 'nuvem') await NUVEM.req('/rest/v1/produtos?id=eq.' + encodeURIComponent(id), { method:'DELETE' }, true);
+    if (this.modo === 'nuvem') await NUVEM.apagarProduto(id);
     else if (this.modo === 'db' && this.db) await this.db.collection('produtos').doc(id).delete();
     else localStorage.setItem('lamour.produtos', JSON.stringify(this.produtos));
   },
@@ -678,16 +831,7 @@ const Store = {
 
   async subirImagem(file){
     const { blob, dataUrl } = await prepararImagem(file);
-    if (this.modo === 'nuvem'){
-      const n = NUVEM.cfg();
-      const nome = 'img-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg';
-      await NUVEM.req('/storage/v1/object/' + n.bucket + '/' + nome, {
-        method:'POST',
-        headers:{ 'Content-Type':'image/jpeg', 'x-upsert':'true' },
-        body: blob || file
-      }, true);
-      return n.url + '/storage/v1/object/public/' + n.bucket + '/' + nome;
-    }
+    if (this.modo === 'nuvem') return await NUVEM.subirImagem(blob || file, dataUrl);
     if (this.assets){
       const r = await this.assets.upload(blob || file, { type:'image/jpeg' });
       return '/_blob/' + r.id;
@@ -1391,7 +1535,7 @@ const SCHEMA = [
 ];
 
 const Admin = {
-  draft:null, aba:'identidade', dirty:false, liberado:false, alvoImg:null, editando:null,
+  draft:null, aba:'identidade', dirty:false, liberado:false, alvoImg:null, editando:null, provNuvem:null,
 
   entrar(){
     const modoDb = Store.modo === 'db';
@@ -1521,21 +1665,25 @@ const Admin = {
   painelConexao(){
     const n = (typeof NUVEM !== 'undefined') ? NUVEM.cfg() : null;
     const m = Store.modo;
-    const nomeModo = m === 'nuvem' ? 'Nuvem conectada' : m === 'db' ? 'Banco do site publicado no Claude' : 'Apenas neste navegador';
-    const fixo = (typeof window.LAMOUR_NUVEM === 'object' && window.LAMOUR_NUVEM && window.LAMOUR_NUVEM.url);
+    const prov = this.provNuvem || (n ? n.provedor : 'supabase');
+    const nomeModo = m === 'nuvem'
+      ? 'Nuvem conectada (' + (n && n.provedor === 'firebase' ? 'Firebase / Firestore' : 'Supabase') + ')'
+      : m === 'db' ? 'Banco do site publicado no Claude' : 'Apenas neste navegador';
+    const fixo = (typeof window.LAMOUR_NUVEM === 'object' && window.LAMOUR_NUVEM && (window.LAMOUR_NUVEM.url || window.LAMOUR_NUVEM.projectId));
+    const linha = (rot, val) => `<div style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding-top:.9rem;margin-top:.6rem">
+        <span style="color:var(--ink-2);font-size:.86rem">${rot}</span><b style="word-break:break-all;font-size:.86rem">${esc(val)}</b></div>`;
+
     return `<h2>Conexão</h2>
-      <p class="sub">Para que as mudanças feitas aqui apareçam para todos os visitantes, o site precisa guardar o conteúdo em um banco na internet, e não no navegador.</p>
+      <p class="sub">Para que as mudanças feitas aqui apareçam para todos os visitantes, o site precisa guardar o conteúdo em um banco na internet, e não no navegador. Escolha um dos dois serviços — os dois têm plano gratuito.</p>
 
       <div class="card">
         <h3>Situação atual</h3>
         <p class="hint">Onde o conteúdo deste site está sendo guardado agora.</p>
-        <div class="linha" style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding-top:.9rem">
-          <span>Modo</span><b>${nomeModo}</b>
-        </div>
-        ${n ? `<div class="linha" style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding-top:.9rem;margin-top:.6rem">
-          <span>Endereço</span><b style="word-break:break-all">${esc(n.url)}</b></div>` : ''}
-        ${m === 'nuvem' ? `<div class="linha" style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding-top:.9rem;margin-top:.6rem">
-          <span>Administrador</span><b>${NUVEM.logado() ? 'conectado' : 'não conectado'}</b></div>` : ''}
+        ${linha('Modo', nomeModo)}
+        ${n && n.provedor === 'supabase' ? linha('Endereço', n.url) : ''}
+        ${n && n.provedor === 'firebase' ? linha('Projeto', n.projectId) : ''}
+        ${n && n.provedor === 'firebase' ? linha('Storage', n.storageBucket || 'não configurado') : ''}
+        ${m === 'nuvem' ? linha('Administrador', NUVEM.logado() ? 'conectado' : 'não conectado') : ''}
         ${m === 'nuvem' ? `<div class="btnrow" style="margin-top:1rem">
             <button class="btn-s" id="nv-recarregar">Recarregar da nuvem</button>
             <button class="btn-s btn-s--danger" id="nv-sair">Sair da conta</button>
@@ -1543,13 +1691,30 @@ const Admin = {
       </div>
 
       <div class="card">
-        <h3>Conectar a nuvem (Supabase)</h3>
-        <p class="hint">Crie um projeto gratuito no Supabase, rode o script <b>dados/supabase.sql</b> que veio junto do site e cole abaixo o endereço do projeto e a chave pública (anon). O passo a passo completo está no README.</p>
-        <div class="grid2">
-          <div class="fld span2"><label>Endereço do projeto</label><input class="inp" id="nv-url" placeholder="https://xxxxxxxx.supabase.co" value="${esc(n ? n.url : '')}"></div>
-          <div class="fld span2"><label>Chave pública (anon)</label><input class="inp" id="nv-key" placeholder="eyJhbGciOi..." value="${esc(n ? n.anonKey : '')}"></div>
-          <div class="fld"><label>Pasta das fotos (bucket)</label><input class="inp" id="nv-bucket" value="${esc(n ? n.bucket : 'fotos')}"></div>
+        <h3>Conectar</h3>
+        <div class="fld" style="max-width:320px;margin-bottom:1.2rem">
+          <label>Serviço</label>
+          <select class="inp" id="nv-prov">
+            <option value="supabase"${prov === 'supabase' ? ' selected' : ''}>Supabase (Postgres)</option>
+            <option value="firebase"${prov === 'firebase' ? ' selected' : ''}>Firebase (Firestore)</option>
+          </select>
         </div>
+
+        ${prov === 'firebase' ? `
+          <p class="hint">No console do Firebase: crie o projeto, ative <b>Firestore Database</b>, publique as regras do arquivo <b>dados/firestore.rules</b> e crie o usuário da administradora em <b>Authentication → Users</b>. As duas informações abaixo estão em <b>Configurações do projeto → Seus apps → Configuração do SDK</b>.</p>
+          <div class="grid2">
+            <div class="fld"><label>ID do projeto</label><input class="inp" id="nv-proj" placeholder="minha-loja-1234" value="${esc(n && n.projectId ? n.projectId : '')}"></div>
+            <div class="fld"><label>Chave da API (apiKey)</label><input class="inp" id="nv-apikey" placeholder="AIzaSy..." value="${esc(n && n.apiKey ? n.apiKey : '')}"></div>
+            <div class="fld span2"><label>Bucket do Storage (opcional)</label><input class="inp" id="nv-sbucket" placeholder="minha-loja-1234.appspot.com" value="${esc(n && n.storageBucket ? n.storageBucket : '')}">
+              <span class="tip">O Storage do Firebase exige o plano Blaze (com cartão). Sem ele, use o campo de endereço da imagem para apontar fotos hospedadas em outro lugar.</span></div>
+          </div>` : `
+          <p class="hint">No Supabase: crie o projeto, rode o arquivo <b>dados/supabase.sql</b> no SQL Editor e crie o usuário da administradora em <b>Authentication → Users</b>. As duas informações abaixo estão em <b>Project Settings → API</b>.</p>
+          <div class="grid2">
+            <div class="fld span2"><label>Endereço do projeto</label><input class="inp" id="nv-url" placeholder="https://xxxxxxxx.supabase.co" value="${esc(n && n.url ? n.url : '')}"></div>
+            <div class="fld span2"><label>Chave pública (anon)</label><input class="inp" id="nv-key" placeholder="eyJhbGciOi..." value="${esc(n && n.anonKey ? n.anonKey : '')}"></div>
+            <div class="fld"><label>Pasta das fotos (bucket)</label><input class="inp" id="nv-bucket" value="${esc(n && n.bucket ? n.bucket : 'fotos')}"></div>
+          </div>`}
+
         <div class="btnrow" style="margin-top:1.1rem">
           <button class="btn-s btn-s--ink" id="nv-salvar">Salvar e conectar</button>
           <button class="btn-s" id="nv-testar">Testar conexão</button>
@@ -1558,7 +1723,7 @@ const Admin = {
         <p class="hint" style="margin-top:1rem">${fixo
           ? 'O site já carrega estes dados do arquivo <b>dados/nuvem.js</b>, então vale para todos os visitantes.'
           : 'Depois de conectar, clique em <b>Gerar nuvem.js do site</b> e coloque o arquivo baixado na pasta <b>dados/</b> da hospedagem — é isso que faz todos os visitantes lerem o mesmo banco.'}</p>
-        <p class="hint">A chave anon é pública por natureza: ela só permite <b>ler</b>. Gravar exige o login de administrador, feito pelo Supabase.</p>
+        <p class="hint">A chave que fica no site é pública por natureza e só permite <b>ler</b>. Gravar exige o login de administrador, verificado pelo próprio serviço.</p>
       </div>`;
   },
 
@@ -2005,8 +2170,17 @@ function eventos(){
 
     /* ---- conexão com a nuvem ---- */
     if (t.closest && t.closest('#nv-salvar')){
-      const cfg = { url:$('#nv-url').value.trim().replace(/\/+$/, ''), anonKey:$('#nv-key').value.trim(), bucket:($('#nv-bucket').value.trim() || 'fotos') };
-      if (!cfg.url || !cfg.anonKey){ toast('Preencha o endereço e a chave.'); return; }
+      const prov = $('#nv-prov') ? $('#nv-prov').value : 'supabase';
+      let cfg;
+      if (prov === 'firebase'){
+        cfg = { provedor:'firebase', projectId:$('#nv-proj').value.trim(), apiKey:$('#nv-apikey').value.trim(),
+                storageBucket:$('#nv-sbucket').value.trim() };
+        if (!cfg.projectId || !cfg.apiKey){ toast('Preencha o ID do projeto e a chave da API.'); return; }
+      } else {
+        cfg = { provedor:'supabase', url:$('#nv-url').value.trim().replace(/\/+$/, ''),
+                anonKey:$('#nv-key').value.trim(), bucket:($('#nv-bucket').value.trim() || 'fotos') };
+        if (!cfg.url || !cfg.anonKey){ toast('Preencha o endereço e a chave.'); return; }
+      }
       localStorage.setItem('lamour.nuvem', JSON.stringify(cfg));
       toast('Conectando…');
       Store.erroNuvem = null;
@@ -2161,6 +2335,7 @@ function eventos(){
   document.addEventListener('change', async e => {
     const el = e.target;
     if (el.dataset && el.dataset.c){ Carrinho.cliente[el.dataset.c] = el.value; Carrinho.salvar(); return; }
+    if (el.id === 'nv-prov'){ Admin.provNuvem = el.value; Admin.render(); return; }
     if (el.id === 'cordem'){ Cat.ordem = el.value; renderCatalogo(); return; }
     if (el.id === 'pd-cat'){ Admin.fProd.cat = el.value; Admin.renderProdutos(); return; }
     if (el.id === 'file-input' && el.files && el.files[0]){

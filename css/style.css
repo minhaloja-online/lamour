@@ -1043,6 +1043,24 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .plink{font:inherit;color:inherit;text-align:left;padding:0;background:none}
 .plink:hover{color:var(--gold)}
 
+
+/* ---- revisão: links de seção, selos e menu ativo ---- */
+.tg--sale{background:var(--rose);border-color:var(--rose);color:#3B211E;font-weight:600}
+.fchip--busca{background:var(--gold);border-color:var(--gold);color:#20170C}
+.zoomlink{display:block;position:relative}
+.zoomlink .art{transition:transform 1s var(--ease)}
+.zoomlink:hover .art{transform:scale(1.05)}
+.care__go{
+  display:inline-flex;align-items:center;gap:.5rem;margin-top:.7rem;
+  font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;font-weight:600;color:var(--gold);
+}
+.care__go .arw{width:15px;height:15px;transition:transform .45s var(--ease)}
+.care__c:hover .care__go .arw{transform:translateX(5px)}
+.prod{cursor:pointer}
+.prod .plink{font:inherit;font-family:var(--serif)}
+.mmenu__nav a.is-active{color:var(--gold)}
+.mmenu__nav a.is-active span{color:var(--ink-2)}
+
 /* ============================================================
    PÁGINA INSTITUCIONAL
    ============================================================ */

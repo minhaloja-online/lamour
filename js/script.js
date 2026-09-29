@@ -24,7 +24,8 @@ const DEFAULT_DATA = {
   marquee:{ itens:["Perfumes","Make","Cosméticos","Moda","Essência","Estilo"] },
 
   cats:{ eyebrow:"Categorias", titulo:"Encontre o seu estilo",
-         subtitulo:"Descubra um universo de beleza, fragrâncias e moda pensado para você." },
+         subtitulo:"Descubra um universo de beleza, fragrâncias e moda pensado para você.",
+         ctaCat:"Ver todas as categorias no catálogo" },
 
   bento:{ eyebrow:"Na loja", titulo:"Um universo de possibilidades" },
 
@@ -36,29 +37,32 @@ const DEFAULT_DATA = {
          subtitulo:"Do básico do dia a dia ao look que pede presença.",
          frase1:"Realce. Expresse.", frase2:"Encante.",
          chips:["Batom","Base","Blush","Máscara","Paleta","Gloss"],
+         ctaCat:"Ver make no catálogo", categoria:"make",
          img1:"", img2:"", img3:"" },
 
   cuidados:{ eyebrow:"Cosméticos", titulo:"Seu momento de cuidado começa aqui.",
     subtitulo:"Skincare, corpo, cabelos e higiene: pequenos rituais que fazem diferença todos os dias.",
+    ctaCat:"Ver cosméticos no catálogo", categoria:"cosmeticos",
     itens:[
-      { titulo:"Cuidados com a pele", texto:"Limpeza, hidratação e proteção para a rotina de skincare.", arte:"skincare", imagem:"" },
-      { titulo:"Corpo", texto:"Hidratantes, óleos e aromas para o cuidado do dia a dia.", arte:"body", imagem:"" },
-      { titulo:"Cabelos", texto:"Produtos para lavar, tratar e finalizar com cuidado.", arte:"hair", imagem:"" },
-      { titulo:"Higiene e beleza", texto:"Essenciais de beleza e variedades para completar a nécessaire.", arte:"hygiene", imagem:"" }
+      { titulo:"Cuidados com a pele", texto:"Limpeza, hidratação e proteção para a rotina de skincare.", arte:"skincare", imagem:"", categoria:"cosmeticos" },
+      { titulo:"Corpo", texto:"Hidratantes, óleos e aromas para o cuidado do dia a dia.", arte:"body", imagem:"", categoria:"cosmeticos" },
+      { titulo:"Cabelos", texto:"Produtos para lavar, tratar e finalizar com cuidado.", arte:"hair", imagem:"", categoria:"cosmeticos" },
+      { titulo:"Higiene e beleza", texto:"Essenciais de beleza e variedades para completar a nécessaire.", arte:"hygiene", imagem:"", categoria:"variedades" }
     ]},
 
   moda:{ eyebrow:"Boutique", titulo:"Vista a sua essência.",
     subtitulo:"Moda para acompanhar sua personalidade em todos os momentos.",
+    ctaCat:"Ver moda no catálogo", categoria:"moda",
     itens:[
-      { titulo:"Vestidos", arte:"moda", imagem:"" },
-      { titulo:"Blusas", arte:"moda-wide", imagem:"" },
-      { titulo:"Conjuntos", arte:"fabric", imagem:"" },
-      { titulo:"Saias e calças", arte:"moda2", imagem:"" },
-      { titulo:"Acessórios", arte:"acessorios", imagem:"" },
-      { titulo:"Variedades", arte:"variedades", imagem:"" }
+      { titulo:"Vestidos", arte:"moda", imagem:"", categoria:"moda" },
+      { titulo:"Blusas", arte:"moda-wide", imagem:"", categoria:"moda" },
+      { titulo:"Conjuntos", arte:"fabric", imagem:"", categoria:"moda" },
+      { titulo:"Saias e calças", arte:"moda2", imagem:"", categoria:"moda" },
+      { titulo:"Acessórios", arte:"acessorios", imagem:"", categoria:"acessorios" },
+      { titulo:"Variedades", arte:"variedades", imagem:"", categoria:"variedades" }
     ]},
 
-  porque:{ eyebrow:"A loja", titulo:"Por que escolher a L'amour?",
+  porque:{ eyebrow:"A loja", titulo:"Por que escolher a L'amour?", ctaCat:"Ver o catálogo completo",
     itens:[
       { titulo:"Variedade", texto:"Um universo de beleza, perfumaria e moda em um só lugar.", icone:"estrela" },
       { titulo:"Estilo", texto:"Produtos escolhidos para diferentes estilos e momentos.", icone:"montanha" },
@@ -68,7 +72,7 @@ const DEFAULT_DATA = {
 
   sobre:{ eyebrow:"Sobre a loja", titulo1:"Mais que uma loja.", titulo2:"Uma experiência.",
     texto:"A L'amour Essência Moda e Variedades nasceu para reunir em um só lugar aquilo que transforma pequenos detalhes em grandes momentos: uma fragrância marcante, uma maquiagem que eleva a autoestima, um cuidado especial ou aquela peça que completa o look.",
-    fecho:"Venha conhecer a L'amour.", imagem:"" },
+    fecho:"Venha conhecer a L'amour.", ctaCat:"Ver o catálogo", imagem:"" },
 
   local:{ eyebrow:"Localização", titulo:"Venha nos conhecer",
     endereco:"", maps:"https://maps.app.goo.gl/qKcD6AvkANBxoahE9",
@@ -904,6 +908,10 @@ function aplicarTextos(){
     const v = get(D(), el.dataset.t);
     if (v != null) el.textContent = v;
   });
+  $$('[data-catcfg]').forEach(el => {
+    const slug = get(D(), el.dataset.catcfg);
+    el.setAttribute('href', slug ? linkCat(slug) : '#/catalogo');
+  });
   $$('[data-maps]').forEach(el => {
     const u = D().local.maps;
     if (el.tagName === 'A'){ el.href = u || '#'; if (u){ el.target = '_blank'; el.rel = 'noopener noreferrer'; } }
@@ -980,10 +988,11 @@ function renderHome(){
   $('#make-chips').innerHTML = (d.make.chips || []).map(c => '<span class="chip">' + esc(c) + '</span>').join('');
 
   $('#care-grid').innerHTML = (d.cuidados.itens || []).map((c, i) => `
-    <article class="care__c" data-rv style="--d:${i * .08}s">
+    <a class="care__c" href="${c.categoria ? linkCat(c.categoria) : '#/catalogo'}" data-rv style="--d:${i * .08}s">
       <div class="care__art"><div class="art" data-art="${esc(c.arte || 'skincare')}" data-src="${esc(c.imagem || '')}" data-alt="${esc(c.titulo)}"></div></div>
-      <div class="care__b"><h3>${esc(c.titulo)}</h3><p>${esc(c.texto || '')}</p></div>
-    </article>`).join('');
+      <div class="care__b"><h3>${esc(c.titulo)}</h3><p>${esc(c.texto || '')}</p>
+        <span class="care__go">Ver no catálogo ${SETA}</span></div>
+    </a>`).join('');
 
   $('#moda-grid').innerHTML = (d.moda.itens || []).map((m, i) => `
     <a class="look" href="${m.categoria ? linkCat(m.categoria) : '#/catalogo'}" data-rv style="--d:${(i % 3) * .08}s">
@@ -1032,13 +1041,19 @@ function renderHome(){
   $('#soc-note').textContent = faltam ? 'Links das redes podem ser configurados no painel.' : '';
 }
 
+function descontoTag(p){
+  const a = precoNum(p.preco), b = precoNum(p.precoDe);
+  if (a == null || b == null || b <= a) return '';
+  return '<span class="tg tg--sale">-' + Math.round((1 - a / b) * 100) + '%</span>';
+}
+
 function cardProdutoHTML(p, i){
   const d = D();
   const mostrar = d.catalogo.mostrarPreco !== false;
   const preco = precoTxt(p.preco);
   const cat = catPorId(p.categoria);
   return `
-    <article class="prod" data-rv style="--d:${(i % 3) * .08}s">
+    <article class="prod" data-p="${esc(p.id)}" data-rv style="--d:${(i % 3) * .08}s">
       <div class="prod__art">
         <span class="prod__k">${esc(cat ? cat.nome : (p.categoria || 'Produto'))}</span>
         <div class="art" data-art="${esc(p.arte || 'perfume')}" data-src="${esc(p.imagem || '')}" data-alt="${esc(p.nome)}"></div>
@@ -1047,7 +1062,7 @@ function cardProdutoHTML(p, i){
         </button>
       </div>
       <div class="prod__body">
-        <h3>${esc(p.nome)}</h3>
+        <h3><button class="plink" data-p="${esc(p.id)}">${esc(p.nome)}</button></h3>
         <p class="prod__desc">${esc(p.descricao || '')}</p>
         ${mostrar && preco ? `<p class="prod__price">${esc(preco)}</p>` : ''}
         <button class="btn btn--ghost" data-wa="Olá! Vim pelo site da ${esc(D().marca.nome)} e tenho interesse em: ${esc(p.nome)}.">Tenho interesse ${SETA}</button>
@@ -1067,7 +1082,8 @@ function renderCatalogo(){
   Store.produtos.filter(p => p.ativo !== false).forEach(p => { cont[p.categoria] = (cont[p.categoria] || 0) + 1; });
 
   $('#filtros').innerHTML = [`<button class="fchip${Cat.filtro === 'todos' ? ' is-on' : ''}" data-f="todos">Todos</button>`]
-    .concat(cats.map(c => `<button class="fchip${Cat.filtro === c.id ? ' is-on' : ''}" data-f="${esc(c.id)}">${esc(c.nome)}${cont[c.id] ? ' · ' + cont[c.id] : ''}</button>`)).join('');
+    .concat(cats.map(c => `<button class="fchip${Cat.filtro === c.id ? ' is-on' : ''}" data-f="${esc(c.id)}">${esc(c.nome)}${cont[c.id] ? ' · ' + cont[c.id] : ''}</button>`))
+    .concat(Cat.busca ? [`<button class="fchip fchip--busca is-on" data-limpar-busca>“${esc(Cat.busca)}” ✕</button>`] : []).join('');
 
   let lista = Store.produtos.filter(p => p.ativo !== false);
   if (Cat.filtro !== 'todos') lista = lista.filter(p => p.categoria === Cat.filtro);
@@ -1094,7 +1110,7 @@ function renderCatalogo(){
     return `
       <article class="pcard" data-p="${esc(p.id)}">
         <div class="pcard__art">
-          <span class="tagline">${p.destaque ? '<span class="tg tg--gold">Destaque</span>' : ''}${(p.tags || []).slice(0, 1).map(t => '<span class="tg">' + esc(t) + '</span>').join('')}</span>
+          <span class="tagline">${descontoTag(p)}${p.destaque ? '<span class="tg tg--gold">Destaque</span>' : ''}${(p.tags || []).slice(0, 1).map(t => '<span class="tg">' + esc(t) + '</span>').join('')}</span>
           <div class="art" data-art="${esc(p.arte || 'perfume')}" data-src="${esc(p.imagem || '')}" data-alt="${esc(p.nome)}"></div>
           <button class="padd" data-add-cart="${esc(p.id)}" aria-label="Adicionar ${esc(p.nome)} ao pedido">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
@@ -1370,7 +1386,8 @@ const SCHEMA = [
   { id:'secoes', nome:'Seções', icone:'<path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round"/>', blocos:[
     { titulo:'Categorias', campos:[
       { k:'cats.eyebrow', l:'Linha fina', t:'text' }, { k:'cats.titulo', l:'Título', t:'text' },
-      { k:'cats.subtitulo', l:'Subtítulo', t:'textarea', span:true }
+      { k:'cats.subtitulo', l:'Subtítulo', t:'textarea', span:true },
+      { k:'cats.ctaCat', l:'Link para o catálogo', t:'text', span:true }
     ]},
     { titulo:'Um universo de possibilidades', campos:[
       { k:'bento.eyebrow', l:'Linha fina', t:'text' }, { k:'bento.titulo', l:'Título', t:'text' }
@@ -1384,26 +1401,34 @@ const SCHEMA = [
       { k:'make.subtitulo', l:'Subtítulo', t:'textarea', span:true },
       { k:'make.frase1', l:'Frase — parte 1', t:'text' }, { k:'make.frase2', l:'Frase — parte 2', t:'text' },
       { k:'make.chips', l:'Etiquetas', t:'lista', span:true },
+      { k:'make.ctaCat', l:'Link para o catálogo', t:'text' },
+      { k:'make.categoria', l:'Categoria que o link abre', t:'catsel' },
       { k:'make.img1', l:'Foto 1', t:'img' }, { k:'make.img2', l:'Foto 2', t:'img' }, { k:'make.img3', l:'Foto 3', t:'img' }
     ]},
     { titulo:'Cosméticos', campos:[
       { k:'cuidados.eyebrow', l:'Linha fina', t:'text' }, { k:'cuidados.titulo', l:'Título', t:'text' },
-      { k:'cuidados.subtitulo', l:'Subtítulo', t:'textarea', span:true }
+      { k:'cuidados.subtitulo', l:'Subtítulo', t:'textarea', span:true },
+      { k:'cuidados.ctaCat', l:'Link para o catálogo', t:'text' },
+      { k:'cuidados.categoria', l:'Categoria que o link abre', t:'catsel' }
     ]},
     { titulo:'Cartões de cuidados', rep:{ k:'cuidados.itens', rotulo:'Cartão',
-      novo:{ titulo:'Novo cartão', texto:'', arte:'skincare', imagem:'' },
-      campos:[ { k:'titulo', l:'Título', t:'text' }, { k:'texto', l:'Texto', t:'textarea', span:true },
+      novo:{ titulo:'Novo cartão', texto:'', arte:'skincare', imagem:'', categoria:'cosmeticos' },
+      campos:[ { k:'titulo', l:'Título', t:'text' }, { k:'categoria', l:'Leva para a categoria', t:'catsel' },
+               { k:'texto', l:'Texto', t:'textarea', span:true },
                { k:'arte', l:'Ilustração', t:'select', opts:ARTES }, { k:'imagem', l:'Foto', t:'img' } ] } },
     { titulo:'Moda', campos:[
       { k:'moda.eyebrow', l:'Linha fina', t:'text' }, { k:'moda.titulo', l:'Título', t:'text' },
-      { k:'moda.subtitulo', l:'Subtítulo', t:'textarea', span:true }
+      { k:'moda.subtitulo', l:'Subtítulo', t:'textarea', span:true },
+      { k:'moda.ctaCat', l:'Link para o catálogo', t:'text' },
+      { k:'moda.categoria', l:'Categoria que o link abre', t:'catsel' }
     ]},
     { titulo:'Cartões de moda', rep:{ k:'moda.itens', rotulo:'Cartão',
       novo:{ titulo:'Nova peça', arte:'moda', imagem:'', categoria:'' },
       campos:[ { k:'titulo', l:'Título', t:'text' }, { k:'categoria', l:'Leva para a categoria', t:'catsel' },
                { k:'arte', l:'Ilustração', t:'select', opts:ARTES }, { k:'imagem', l:'Foto', t:'img' } ] } },
     { titulo:'Por que a loja', campos:[
-      { k:'porque.eyebrow', l:'Linha fina', t:'text' }, { k:'porque.titulo', l:'Título', t:'text' }
+      { k:'porque.eyebrow', l:'Linha fina', t:'text' }, { k:'porque.titulo', l:'Título', t:'text' },
+      { k:'porque.ctaCat', l:'Link para o catálogo', t:'text', span:true }
     ]},
     { titulo:'Benefícios', rep:{ k:'porque.itens', rotulo:'Benefício',
       novo:{ titulo:'Novo benefício', texto:'', icone:'estrela' },
@@ -1413,6 +1438,7 @@ const SCHEMA = [
       { k:'sobre.eyebrow', l:'Linha fina', t:'text' },
       { k:'sobre.titulo1', l:'Título — linha 1', t:'text' }, { k:'sobre.titulo2', l:'Título — linha 2', t:'text' },
       { k:'sobre.texto', l:'Texto', t:'textarea', span:true }, { k:'sobre.fecho', l:'Frase final', t:'text' },
+      { k:'sobre.ctaCat', l:'Link para o catálogo', t:'text' },
       { k:'sobre.imagem', l:'Foto', t:'img' }
     ]},
     { titulo:'Chamada de WhatsApp', campos:[
@@ -1902,6 +1928,7 @@ function header(){
   const map = new Map();
   links.forEach(a => { const s = document.querySelector(a.getAttribute('href')); if (s) map.set(s, a); });
   const io = new IntersectionObserver(es => {
+    if ($('#view-home').hidden) return;
     es.forEach(e => {
       const a = map.get(e.target);
       if (a && e.isIntersecting){ $$('.nav a').forEach(l => l.classList.remove('is-active')); a.classList.add('is-active'); }
@@ -1947,7 +1974,13 @@ function buscaSite(){
   const render = q => {
     const term = q.trim().toLowerCase();
     const all = indice();
-    const list = !term ? all.slice(0, 6) : all.filter(i => (i.t + ' ' + i.k + ' ' + i.s).toLowerCase().includes(term)).slice(0, 12);
+    let list = !term ? all.slice(0, 6) : all.filter(i => (i.t + ' ' + i.k + ' ' + i.s).toLowerCase().includes(term)).slice(0, 12);
+    if (term){
+      const nProd = Store.produtos.filter(p => p.ativo !== false &&
+        (p.nome + ' ' + (p.descricao || '') + ' ' + (p.tags || []).join(' ')).toLowerCase().includes(term)).length;
+      list = [{ t:nProd ? 'Ver ' + nProd + (nProd > 1 ? ' produtos' : ' produto') + ' no catálogo' : 'Abrir o catálogo',
+                s:'Catálogo', h:'#/catalogo?q=' + encodeURIComponent(term) }].concat(list);
+    }
     out.innerHTML = list.length ? list.map(i => `<a href="${i.h}"><strong>${esc(i.t)}</strong><em>${esc(i.s)}</em></a>`).join('')
       : '<a href="#contato"><strong>Nada encontrado</strong><em>Fale com a loja</em></a>';
     $$('a', out).forEach(a => a.addEventListener('click', () => setOpen(false)));
@@ -2036,8 +2069,17 @@ function fab(){
 /* ============================================================
    ROTEADOR
    ============================================================ */
+function marcarNav(v){
+  $$('.nav a, .mmenu__nav a').forEach(a => a.classList.remove('is-active'));
+  const alvo = v === 'catalogo' ? '#/catalogo' : v === 'sobre' ? '#/sobre' : v === 'carrinho' ? '#/carrinho' : null;
+  if (alvo) $$('a[href^="' + alvo + '"]').forEach(a => {
+    if (a.closest('.nav') || a.closest('.mmenu__nav')) a.classList.add('is-active');
+  });
+}
+
 function mostrar(v){
   ['home','catalogo','sobre','carrinho','admin'].forEach(n => { $('#view-' + n).hidden = (n !== v); });
+  marcarNav(v);
   $('#fab').style.display = v === 'admin' ? 'none' : '';
   if (v !== 'home') window.scrollTo({ top:0, behavior:'auto' });
   if (v === 'admin') Admin.entrar();
@@ -2054,6 +2096,7 @@ function rota(){
     const qs = new URLSearchParams(h.split('?')[1] || '');
     const cat = qs.get('cat');
     if (cat) Cat.filtro = cat;
+    if (qs.has('q')){ Cat.busca = qs.get('q') || ''; if (!cat) Cat.filtro = 'todos'; }
     mostrar('catalogo');
     const pid = qs.get('p');
     if (pid) setTimeout(() => abrirProduto(pid), 120);
@@ -2125,14 +2168,21 @@ function eventos(){
 
     const pl = t.closest && t.closest('.plink');
     if (pl){ abrirProduto(pl.dataset.p); return; }
-    const pc = t.closest && t.closest('.pcard');
+    const pc = t.closest && t.closest('.pcard, .prod[data-p]');
     if (pc){ abrirProduto(pc.dataset.p); return; }
     if (t.closest && (t.closest('[data-fechar]') || t === $('#pmodal'))){ fecharProduto(); return; }
 
+    if (t.closest && t.closest('[data-limpar-busca]')){
+      Cat.busca = '';
+      history.replaceState(null, '', '#/catalogo' + (Cat.filtro !== 'todos' ? '?cat=' + encodeURIComponent(Cat.filtro) : ''));
+      renderCatalogo();
+      return;
+    }
     const fc = t.closest && t.closest('.fchip');
     if (fc){
       Cat.filtro = fc.dataset.f;
-      const base = '#/catalogo' + (Cat.filtro !== 'todos' ? '?cat=' + encodeURIComponent(Cat.filtro) : '');
+      const base = '#/catalogo' + (Cat.filtro !== 'todos' ? '?cat=' + encodeURIComponent(Cat.filtro) : '') +
+        (Cat.busca ? (Cat.filtro !== 'todos' ? '&' : '?') + 'q=' + encodeURIComponent(Cat.busca) : '');
       history.replaceState(null, '', base);
       renderCatalogo();
       return;

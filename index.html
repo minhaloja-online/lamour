@@ -175,6 +175,11 @@
       <p class="lede" data-rv style="--d:.16s" data-t="cats.subtitulo"></p>
     </div>
     <div class="cats" id="cats-grid"></div>
+    <div style="margin-top:2.4rem;display:flex;justify-content:center">
+      <a class="ulink" href="#/catalogo"><span data-t="cats.ctaCat">Ver todas as categorias no catálogo</span>
+        <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
   </div>
 </section>
 
@@ -217,13 +222,16 @@
       <p class="lede" data-rv style="--d:.16s" data-t="make.subtitulo"></p>
     </div>
     <div class="make__grid">
-      <div class="make__a reveal-img" data-rv><div class="art" data-art="lips" data-img="make.img1" data-alt="Batom em tom rosé"></div></div>
-      <div class="make__b reveal-img" data-rv style="--d:.12s"><div class="art" data-art="palette" data-img="make.img2" data-alt="Paleta de sombras"></div></div>
+      <a class="make__a reveal-img zoomlink" data-rv data-catcfg="make.categoria" href="#/catalogo"><div class="art" data-art="lips" data-img="make.img1" data-alt="Batom em tom rosé"></div></a>
+      <a class="make__b reveal-img zoomlink" data-rv style="--d:.12s" data-catcfg="make.categoria" href="#/catalogo"><div class="art" data-art="palette" data-img="make.img2" data-alt="Paleta de sombras"></div></a>
       <div class="make__c">
-        <div class="make__d reveal-img" data-rv style="--d:.2s"><div class="art" data-art="brush" data-img="make.img3" data-alt="Pincéis de maquiagem"></div></div>
+        <a class="make__d reveal-img zoomlink" data-rv style="--d:.2s" data-catcfg="make.categoria" href="#/catalogo"><div class="art" data-art="brush" data-img="make.img3" data-alt="Pincéis de maquiagem"></div></a>
         <div data-rv style="--d:.28s">
           <p class="make__say"><span data-t="make.frase1">Realce. Expresse.</span><span data-t="make.frase2">Encante.</span></p>
           <div class="make__cap" id="make-chips"></div>
+          <p style="margin-top:1.6rem"><a class="ulink" data-catcfg="make.categoria" href="#/catalogo"><span data-t="make.ctaCat">Ver make no catálogo</span>
+            <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a></p>
         </div>
       </div>
     </div>
@@ -240,6 +248,12 @@
       <p class="lede" data-rv style="--d:.16s" data-t="cuidados.subtitulo"></p>
     </div>
     <div class="care" id="care-grid"></div>
+    <div style="margin-top:2.4rem;display:flex;justify-content:center">
+      <a class="btn btn--ghost" data-catcfg="cuidados.categoria" href="#/catalogo">
+        <span data-t="cuidados.ctaCat">Ver cosméticos no catálogo</span>
+        <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
   </div>
 </section>
 
@@ -253,6 +267,12 @@
       <p class="lede" data-rv style="--d:.16s" data-t="moda.subtitulo"></p>
     </div>
     <div class="moda__grid" id="moda-grid"></div>
+    <div style="margin-top:2.6rem;display:flex;justify-content:center">
+      <a class="btn btn--light" data-catcfg="moda.categoria" href="#/catalogo">
+        <span data-t="moda.ctaCat">Ver moda no catálogo</span>
+        <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
   </div>
 </section>
 
@@ -263,6 +283,11 @@
       <h2 class="title" data-rv style="--d:.08s" data-t="porque.titulo"></h2>
     </div>
     <div class="why" id="why-grid"></div>
+    <div style="margin-top:2.6rem;display:flex;justify-content:center">
+      <a class="btn" href="#/catalogo"><span data-t="porque.ctaCat">Ver o catálogo completo</span>
+        <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </a>
+    </div>
   </div>
 </section>
 
@@ -281,7 +306,10 @@
           Como chegar
           <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </a>
-        <a class="btn btn--ghost" href="#/sobre">Conheça a loja</a>
+        <a class="btn btn--ghost" href="#/sobre">Nossa história</a>
+        <a class="ulink" href="#/catalogo" style="align-self:center"><span data-t="sobre.ctaCat">Ver o catálogo</span>
+          <svg class="arw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
       </div>
     </div>
   </div>
@@ -389,11 +417,6 @@
   <div class="ctools">
     <div class="wrap ctools__in">
       <div class="filters" id="filtros" role="tablist" aria-label="Categorias"></div>
-      <label class="cfield">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6" stroke-linecap="round"/></svg>
-        <span class="vh">Buscar produto</span>
-        <input type="search" id="cbusca" placeholder="Buscar produto…" autocomplete="off">
-      </label>
       <label class="vh" for="cordem">Ordenar</label>
       <select class="csel" id="cordem">
         <option value="destaque">Destaques primeiro</option>

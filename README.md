@@ -1,6 +1,6 @@
 # L'amour Essência Moda e Variedades — site
 
-Site completo em HTML5, CSS3 e JavaScript puro, sem dependências além das fontes do Google. Cinco telas em um arquivo só, navegadas pelo endereço:
+Site completo em HTML5, CSS3 e JavaScript puro, sem bibliotecas. Cinco telas em um arquivo só:
 
 | Tela | Endereço |
 |---|---|
@@ -15,16 +15,87 @@ Site completo em HTML5, CSS3 e JavaScript puro, sem dependências além das font
 ├── index.html
 ├── css/style.css
 ├── js/script.js
-├── dados/conteudo.js      ← conteúdo publicado (gerado pelo painel)
-├── assets/                ← fotos, se preferir referenciá-las por caminho
+├── dados/
+│   ├── nuvem.js        ← conexão com o banco compartilhado
+│   ├── conteudo.js     ← alternativa sem banco (opcional)
+│   └── supabase.sql    ← script que cria o banco
+├── assets/
 └── README.md
 ```
 
-## 1. Pedido pelo WhatsApp
+---
 
-O cliente clica no **+** sobre a foto do produto (na home ou no catálogo) ou escolhe a quantidade dentro da ficha do produto. O contador aparece no ícone do carrinho, no topo.
+# ⭐ 1. Fazer as alterações valerem para todos
 
-Em `#/carrinho` ele ajusta quantidades, remove itens, informa nome, entrega ou retirada e observações. O botão monta a mensagem e abre o WhatsApp da loja já com tudo escrito:
+Sem banco, o painel salva no navegador de quem editou — ninguém mais vê. Para o conteúdo valer para todos os visitantes, conecte o site a um banco na internet. Usamos o **Supabase**, que tem plano gratuito suficiente para uma loja.
+
+São cinco passos, uma vez só:
+
+### Passo 1 — Criar o projeto
+Entre em `supabase.com`, crie uma conta e um projeto novo. Anote a senha do banco que ele pedir (não é a mesma do painel).
+
+### Passo 2 — Criar as tabelas
+No menu lateral, abra **SQL Editor → New query**, cole todo o conteúdo de `dados/supabase.sql` e clique em **Run**. Isso cria as tabelas, as permissões e a pasta de fotos.
+
+### Passo 3 — Criar o login da administradora
+Ainda no Supabase:
+- **Authentication → Users → Add user**: informe o e-mail e a senha que ela vai usar para entrar no painel. Marque *Auto Confirm User*.
+- **Authentication → Providers → Email**: desligue **"Allow new users to sign up"**, para que ninguém crie conta sozinho.
+
+### Passo 4 — Pegar as duas chaves
+Em **Project Settings → API**, copie:
+- **Project URL** (algo como `https://abcdefgh.supabase.co`)
+- **anon public** (uma chave longa começando com `eyJ...`)
+
+A chave anon é pública de propósito: com ela só dá para **ler**. Gravar exige o login do passo 3.
+
+### Passo 5 — Ligar o site ao banco
+Abra `dados/nuvem.js`, descomente o bloco e cole as duas informações:
+
+```js
+window.LAMOUR_NUVEM = {
+  url: "https://abcdefgh.supabase.co",
+  anonKey: "eyJhbGciOi...",
+  bucket: "fotos"
+};
+```
+
+Suba a pasta para a hospedagem. Pronto: qualquer alteração feita no painel aparece para todo mundo, em qualquer aparelho, na hora que a pessoa abrir ou recarregar o site.
+
+> Atalho: você também pode colar essas duas informações direto no painel, em **Conexão**, clicar em *Salvar e conectar* e depois em **Gerar nuvem.js do site** — aí é só substituir o arquivo na hospedagem.
+
+### Como fica o acesso ao painel
+
+| Situação | Como entra | O que acontece ao salvar |
+|---|---|---|
+| Nuvem conectada | e-mail + senha do Supabase | vale para todos os visitantes |
+| Sem nuvem | senha local (padrão `lamour2026`) | vale só naquele navegador |
+
+As fotos enviadas pelo painel também vão para a nuvem e ficam com endereço próprio — nada de imagem pesada guardada no navegador.
+
+---
+
+## 2. Painel do administrador
+
+`#/admin`. Onze abas:
+
+- **Identidade** — nome, assinatura, emoji do ícone, logotipo, as sete cores, tema escuro automático, fontes.
+- **Início** — textos da primeira tela, foto principal, frase de impacto, faixa deslizante.
+- **Seções** — títulos e textos de cada bloco da home, cartões de cosméticos e moda, benefícios, sobre, chamadas, rodapé.
+- **Categorias** — criar, descrever, foto, mostrar/ocultar.
+- **Institucional** — capa, história, valores, galeria e convite final da página `#/sobre`.
+- **Contato** — WhatsApp e mensagem automática, telefone, e-mail, redes, endereço, Maps, horários linha a linha.
+- **Catálogo** — textos, mostrar ou esconder preços, senha local do painel.
+- **Pedidos** — textos do carrinho, primeira linha da mensagem do WhatsApp, aviso e o que perguntar ao cliente.
+- **Produtos** — nome, categoria, descrição, preço, preço anterior, etiquetas, ordem, foto, destaque na home, visível no catálogo.
+- **Conexão** — situação atual, conectar/testar a nuvem, gerar o `nuvem.js`, recarregar, sair da conta.
+- **Dados** — cópia de segurança, importação e o `conteudo.js`.
+
+Cores e fontes mudam ao vivo; **Salvar alterações** grava o resto. Produtos são salvos no próprio formulário.
+
+## 3. Pedido pelo WhatsApp
+
+O cliente clica no **+** sobre a foto (home ou catálogo) ou escolhe a quantidade na ficha do produto. Em `#/carrinho` ajusta quantidades, informa nome, entrega ou retirada e observações, e o botão abre o WhatsApp da loja com a lista pronta:
 
 ```
 Olá! Gostaria de fazer um pedido pelo site:
@@ -36,51 +107,21 @@ Total estimado: R$ 219,70
 
 Nome: Maria
 Entrega: Retirar na loja
-Observações: cor rosé
 ```
 
-O pedido fica salvo no navegador do cliente — se ele fechar e voltar depois, a lista continua lá. Produtos sem preço entram na lista como "a confirmar na conversa". Não há cobrança nem estoque: a negociação acontece no WhatsApp.
-
-## 2. Painel do administrador
-
-Abra `#/admin`. Senha inicial: **lamour2026** (troque em *Catálogo → Acesso ao painel*). Dez abas:
-
-- **Identidade** — nome, assinatura, emoji do ícone, logotipo, as sete cores, tema escuro automático, fontes de título e texto.
-- **Início** — textos da primeira tela, foto principal, frase de impacto, faixa deslizante.
-- **Seções** — títulos e textos de cada bloco da home, cartões de cosméticos e de moda, benefícios, sobre, chamadas e rodapé.
-- **Categorias** — criar, descrever, escolher foto, mostrar/ocultar.
-- **Institucional** — capa, história, valores, galeria de fotos e o convite final da página `#/sobre`.
-- **Contato** — WhatsApp e mensagem automática, telefone, e-mail, redes, endereço, Maps e horários linha a linha.
-- **Catálogo** — textos, mostrar ou esconder preços, senha do painel.
-- **Pedidos** — textos da página do carrinho, primeira linha da mensagem do WhatsApp, aviso do resumo e o que perguntar ao cliente (nome, entrega, observações, total).
-- **Produtos** — cadastro completo: nome, categoria, descrição, preço, preço anterior, etiquetas, ordem, foto, ilustração de reserva, destaque na home e visível no catálogo.
-- **Dados** — cópia de segurança, importação e o `conteudo.js` de publicação.
-
-Cores e fontes mudam ao vivo; **Salvar alterações** grava o resto. Produtos são salvos no próprio formulário.
-
-## 3. Onde o conteúdo fica salvo
-
-**Publicado no Claude:** usa o banco do próprio artifact. O que o administrador salva vale para todo mundo que abrir o link, e as fotos ficam hospedadas junto. Só quem tem permissão de edição altera — sem senha.
-
-**Hospedado por você (esta pasta):** as alterações ficam no navegador de quem editou. Para valerem para todos:
-
-1. Painel → **Dados → Gerar conteudo.js do site**.
-2. Substitua `dados/conteudo.js` pelo arquivo baixado.
-3. Suba a pasta para a hospedagem.
-
-Para catálogo grande, coloque as fotos em `assets/produtos/` e cole o caminho no campo de endereço da imagem, em vez de enviá-las pelo painel: o arquivo de conteúdo fica muito mais leve.
+O carrinho fica salvo no navegador do cliente (é dele, não precisa ir para o banco). Produtos sem preço entram como "a confirmar na conversa". Não há pagamento nem estoque: a negociação acontece no WhatsApp.
 
 ## 4. Imagens
 
-Todo campo de foto aceita, nesta ordem: foto enviada pelo painel, endereço colado à mão, ou — se não houver nenhum — uma ilustração vetorial gerada pelo site na paleta da marca. Nenhuma tela quebra por falta de imagem. Fotos enviadas são reduzidas a 1400px e comprimidas.
+Todo campo de foto aceita, nesta ordem: foto enviada pelo painel, endereço colado à mão, ou uma ilustração vetorial gerada pelo próprio site na paleta da marca. Nenhuma tela quebra por falta de imagem. Fotos enviadas são reduzidas a 1400px e comprimidas antes de subir.
 
 ## 5. Publicação
 
 Site estático: Netlify, Vercel, GitHub Pages, Hostinger, cPanel. Nada para compilar. Antes de publicar, ajuste em `index.html` o `og:url`, o `og:image` e o bloco `application/ld+json` (acrescente `address` e `openingHours` quando estiverem definidos).
 
-## 6. Segurança, com franqueza
+## 6. Sem nuvem (alternativa simples)
 
-A senha do painel na versão hospedada por você é uma trava de conveniência, não de segurança: o site é estático e quem lê o código a encontra. Ela evita mexidas acidentais. Se o catálogo virar algo crítico, o caminho é hospedagem com login de verdade — ou a versão publicada no Claude, onde a permissão é controlada pela plataforma.
+Se preferir não criar banco nenhum: edite tudo no painel, vá em **Dados → Gerar conteudo.js do site** e substitua `dados/conteudo.js` na hospedagem. O conteúdo passa a valer para todos os visitantes — mas cada alteração exige subir o arquivo de novo. A nuvem existe justamente para evitar esse passo.
 
 ## 7. O que continua em branco
 

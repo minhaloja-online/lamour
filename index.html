@@ -510,6 +510,7 @@
       <h2>Área do administrador</h2>
       <p id="lock-msg">Digite a senha para editar o site.</p>
       <div style="display:grid;gap:.8rem">
+        <input class="inp" type="email" id="lock-email" placeholder="E-mail" autocomplete="username" hidden>
         <input class="inp" type="password" id="lock-pin" placeholder="Senha" autocomplete="current-password">
         <button class="btn" id="lock-go">Entrar</button>
         <a class="ulink" href="#inicio" data-nav="home" style="justify-content:center">Voltar ao site</a>
@@ -618,6 +619,7 @@
 }
 </script>
 
+<script src="dados/nuvem.js"></script>
 <script src="dados/conteudo.js"></script>
 <script src="js/script.js" defer></script>
 </body>

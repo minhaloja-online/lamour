@@ -484,6 +484,75 @@ function paintArt(root = document){
 }
 
 /* ============================================================
+   NUVEM — banco compartilhado (Supabase via REST, sem bibliotecas)
+   Configure em dados/nuvem.js ou pelo painel (aba Conexão).
+   ============================================================ */
+const NUVEM = {
+  cfg(){
+    let n = (typeof window.LAMOUR_NUVEM === 'object' && window.LAMOUR_NUVEM && window.LAMOUR_NUVEM.url) ? window.LAMOUR_NUVEM : null;
+    if (!n){
+      try{ n = JSON.parse(localStorage.getItem('lamour.nuvem') || 'null'); }catch(e){ n = null; }
+    }
+    if (!n || !n.url || !n.anonKey) return null;
+    return { url:String(n.url).replace(/\/+$/, ''), anonKey:n.anonKey, bucket:n.bucket || 'fotos' };
+  },
+  token(){ try{ return JSON.parse(sessionStorage.getItem('lamour.token') || 'null'); }catch(e){ return null; } },
+  setToken(t){ try{ t ? sessionStorage.setItem('lamour.token', JSON.stringify(t)) : sessionStorage.removeItem('lamour.token'); }catch(e){} },
+  logado(){ const t = this.token(); return !!(t && t.access_token); },
+  sair(){ this.setToken(null); },
+
+  async req(path, opts, auth){
+    const n = this.cfg();
+    if (!n) throw new Error('Conexão não configurada.');
+    opts = opts || {};
+    const t = this.token();
+    const chave = (auth && t && t.access_token) ? t.access_token : n.anonKey;
+    const h = Object.assign({ apikey:n.anonKey, Authorization:'Bearer ' + chave }, opts.headers || {});
+    const r = await fetch(n.url + path, Object.assign({}, opts, { headers:h }));
+    if (r.status === 401 && auth && t && t.refresh_token){
+      if (await this.renovar()) return this.req(path, opts, auth);
+    }
+    if (!r.ok){
+      const txt = await r.text().catch(() => '');
+      throw new Error('Nuvem (' + r.status + ') ' + txt.slice(0, 160));
+    }
+    return r;
+  },
+
+  async entrar(email, senha){
+    const n = this.cfg();
+    if (!n) throw new Error('Conexão não configurada.');
+    const r = await fetch(n.url + '/auth/v1/token?grant_type=password', {
+      method:'POST',
+      headers:{ apikey:n.anonKey, 'Content-Type':'application/json' },
+      body:JSON.stringify({ email:email, password:senha })
+    });
+    if (!r.ok) throw new Error('E-mail ou senha incorretos.');
+    this.setToken(await r.json());
+    return true;
+  },
+
+  async renovar(){
+    const n = this.cfg(), t = this.token();
+    if (!n || !t || !t.refresh_token) return false;
+    const r = await fetch(n.url + '/auth/v1/token?grant_type=refresh_token', {
+      method:'POST',
+      headers:{ apikey:n.anonKey, 'Content-Type':'application/json' },
+      body:JSON.stringify({ refresh_token:t.refresh_token })
+    });
+    if (!r.ok){ this.setToken(null); return false; }
+    this.setToken(await r.json());
+    return true;
+  },
+
+  async testar(){
+    const r = await this.req('/rest/v1/site_config?select=id&limit=1');
+    await r.json();
+    return true;
+  }
+};
+
+/* ============================================================
    PERSISTÊNCIA — banco do artifact quando existir, senão navegador
    ============================================================ */
 const Store = {
@@ -505,6 +574,7 @@ const Store = {
 
   async init(){
     this.carregarLocal();
+    if (NUVEM.cfg()){ await this.initNuvem(); return; }
     if (typeof window.claude === 'undefined' || typeof window.claude.use !== 'function') return;
     try{
       const db = await window.claude.use('db');
@@ -540,9 +610,37 @@ const Store = {
     }
   },
 
+  async initNuvem(){
+    try{
+      const r = await NUVEM.req('/rest/v1/site_config?id=eq.1&select=dados');
+      const j = await r.json();
+      this.modo = 'nuvem';
+      if (j[0] && j[0].dados) this.data = mergeDeep(clone(DEFAULT_DATA), j[0].dados);
+      const rp = await NUVEM.req('/rest/v1/produtos?select=id,dados');
+      const jp = await rp.json();
+      this.produtos = jp.map(x => Object.assign({ id:x.id }, x.dados || {}));
+      this.podeEditar = NUVEM.logado();
+      this.onChange && this.onChange('tudo');
+    }catch(e){
+      console.warn('Nuvem indisponível, usando o conteúdo local.', e);
+      this.erroNuvem = e.message || 'falha na conexão';
+      this.modo = 'local';
+    }
+  },
+
+  async recarregar(){
+    if (this.modo === 'nuvem') await this.initNuvem();
+  },
+
   async salvarConfig(data){
     this.data = data;
-    if (this.modo === 'db' && this.db){
+    if (this.modo === 'nuvem'){
+      await NUVEM.req('/rest/v1/site_config', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' },
+        body:JSON.stringify([{ id:1, dados:clone(data) }])
+      }, true);
+    } else if (this.modo === 'db' && this.db){
       await this.db.doc('config/site').set(clone(data));
     } else {
       localStorage.setItem('lamour.config', JSON.stringify(data));
@@ -552,7 +650,14 @@ const Store = {
   async salvarProduto(p){
     const i = this.produtos.findIndex(x => x.id === p.id);
     if (i >= 0) this.produtos[i] = p; else this.produtos.push(p);
-    if (this.modo === 'db' && this.db){
+    if (this.modo === 'nuvem'){
+      const body = clone(p); delete body.id;
+      await NUVEM.req('/rest/v1/produtos', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', Prefer:'resolution=merge-duplicates,return=minimal' },
+        body:JSON.stringify([{ id:p.id, dados:body }])
+      }, true);
+    } else if (this.modo === 'db' && this.db){
       const body = clone(p); delete body.id;
       await this.db.collection('produtos').doc(p.id).set(body);
     } else {
@@ -562,7 +667,8 @@ const Store = {
 
   async removerProduto(id){
     this.produtos = this.produtos.filter(p => p.id !== id);
-    if (this.modo === 'db' && this.db) await this.db.collection('produtos').doc(id).delete();
+    if (this.modo === 'nuvem') await NUVEM.req('/rest/v1/produtos?id=eq.' + encodeURIComponent(id), { method:'DELETE' }, true);
+    else if (this.modo === 'db' && this.db) await this.db.collection('produtos').doc(id).delete();
     else localStorage.setItem('lamour.produtos', JSON.stringify(this.produtos));
   },
 
@@ -572,6 +678,16 @@ const Store = {
 
   async subirImagem(file){
     const { blob, dataUrl } = await prepararImagem(file);
+    if (this.modo === 'nuvem'){
+      const n = NUVEM.cfg();
+      const nome = 'img-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg';
+      await NUVEM.req('/storage/v1/object/' + n.bucket + '/' + nome, {
+        method:'POST',
+        headers:{ 'Content-Type':'image/jpeg', 'x-upsert':'true' },
+        body: blob || file
+      }, true);
+      return n.url + '/storage/v1/object/public/' + n.bucket + '/' + nome;
+    }
     if (this.assets){
       const r = await this.assets.upload(blob || file, { type:'image/jpeg' });
       return '/_blob/' + r.id;
@@ -1279,7 +1395,20 @@ const Admin = {
 
   entrar(){
     const modoDb = Store.modo === 'db';
-    if (modoDb && Store.podeEditar) { this.liberado = true; }
+    const modoNuvem = Store.modo === 'nuvem';
+
+    if (modoNuvem){
+      if (NUVEM.logado()){ this.liberado = true; }
+      else {
+        $('#adm-lock').hidden = false; $('#adm-app').hidden = true;
+        $('#lock-msg').textContent = 'Entre com o e-mail e a senha do administrador cadastrados na nuvem da loja.';
+        $('#lock-email').hidden = false; $('#lock-pin').hidden = false; $('#lock-go').hidden = false;
+        $('#lock-pin').placeholder = 'Senha';
+        setTimeout(() => $('#lock-email').focus(), 200);
+        return;
+      }
+    }
+    else if (modoDb && Store.podeEditar) { this.liberado = true; }
     else if (modoDb && !Store.podeEditar){
       $('#adm-lock').hidden = false; $('#adm-app').hidden = true;
       $('#lock-msg').textContent = 'Este site está publicado no Claude e só quem tem permissão de edição pode alterar o conteúdo.';
@@ -1289,6 +1418,7 @@ const Admin = {
 
     if (!this.liberado){
       $('#adm-lock').hidden = false; $('#adm-app').hidden = true;
+      $('#lock-email').hidden = true;
       $('#lock-pin').hidden = false; $('#lock-go').hidden = false;
       setTimeout(() => $('#lock-pin').focus(), 200);
       return;
@@ -1299,12 +1429,15 @@ const Admin = {
   },
 
   banner(){
-    const db = Store.modo === 'db';
+    const m = Store.modo;
+    const txt = m === 'nuvem'
+      ? '<b>Nuvem conectada.</b> Tudo o que você salvar aqui vale para todo mundo que abrir o site, em qualquer aparelho.'
+      : m === 'db'
+        ? '<b>Modo compartilhado.</b> As alterações ficam no banco deste site publicado no Claude e todos que abrem o link veem a mesma coisa.'
+        : '<b>Modo local.</b> As alterações valem só neste navegador. Para que valham para todos os visitantes, conecte a nuvem na aba <b>Conexão</b>.';
     $('#adm-banner').innerHTML = `<div class="banner">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.6" stroke-linecap="round"/></svg>
-      <span>${db
-        ? '<b>Modo compartilhado.</b> As alterações ficam salvas no banco deste site e todo mundo que abrir o link vê a mesma coisa.'
-        : '<b>Modo local.</b> As alterações ficam salvas apenas neste navegador. Use <b>Dados → Exportar</b> para gerar o arquivo com o conteúdo e enviá-lo junto ao site publicado.'}</span>
+      <span>${txt}${Store.erroNuvem ? ' <b>Aviso:</b> não consegui falar com a nuvem (' + esc(Store.erroNuvem) + ').' : ''}</span>
     </div>`;
   },
 
@@ -1312,6 +1445,7 @@ const Admin = {
     this.banner();
     const abas = SCHEMA.map(s => ({ id:s.id, nome:s.nome, icone:s.icone }))
       .concat([{ id:'produtos', nome:'Produtos', icone:'<path d="M5 8h14l-1 12H6zM9 8V6a3 3 0 016 0v2" stroke-linejoin="round"/>' },
+               { id:'conexao', nome:'Conexão', icone:'<path d="M9 15l6-6M10.5 6.5l1.8-1.8a4.2 4.2 0 016 6L16.5 12M13.5 17.5l-1.8 1.8a4.2 4.2 0 01-6-6L7.5 12" stroke-linecap="round" stroke-linejoin="round"/>' },
                { id:'dados', nome:'Dados', icone:'<path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7" stroke-linejoin="round"/>' }]);
 
     $('#adm-tabs').innerHTML = abas.map(a => `<button class="atab${this.aba === a.id ? ' is-on' : ''}" data-aba="${a.id}">
@@ -1322,6 +1456,7 @@ const Admin = {
         ${s.blocos.map(b => this.bloco(b)).join('')}
       </section>`).join('');
     html += `<section class="apanel${this.aba === 'produtos' ? ' is-on' : ''}" data-painel="produtos"><div id="adm-produtos"></div></section>`;
+    html += `<section class="apanel${this.aba === 'conexao' ? ' is-on' : ''}" data-painel="conexao">${this.painelConexao()}</section>`;
     html += `<section class="apanel${this.aba === 'dados' ? ' is-on' : ''}" data-painel="dados">${this.painelDados()}</section>`;
     $('#adm-panels').innerHTML = html;
 
@@ -1381,6 +1516,50 @@ const Admin = {
         </div></div>`;
     else inner = `<input class="inp" data-k="${k}" value="${esc(v == null ? '' : v)}">`;
     return `<div class="${cls}"><label>${esc(f.l)}</label>${inner}${tip}</div>`;
+  },
+
+  painelConexao(){
+    const n = (typeof NUVEM !== 'undefined') ? NUVEM.cfg() : null;
+    const m = Store.modo;
+    const nomeModo = m === 'nuvem' ? 'Nuvem conectada' : m === 'db' ? 'Banco do site publicado no Claude' : 'Apenas neste navegador';
+    const fixo = (typeof window.LAMOUR_NUVEM === 'object' && window.LAMOUR_NUVEM && window.LAMOUR_NUVEM.url);
+    return `<h2>Conexão</h2>
+      <p class="sub">Para que as mudanças feitas aqui apareçam para todos os visitantes, o site precisa guardar o conteúdo em um banco na internet, e não no navegador.</p>
+
+      <div class="card">
+        <h3>Situação atual</h3>
+        <p class="hint">Onde o conteúdo deste site está sendo guardado agora.</p>
+        <div class="linha" style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding-top:.9rem">
+          <span>Modo</span><b>${nomeModo}</b>
+        </div>
+        ${n ? `<div class="linha" style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding-top:.9rem;margin-top:.6rem">
+          <span>Endereço</span><b style="word-break:break-all">${esc(n.url)}</b></div>` : ''}
+        ${m === 'nuvem' ? `<div class="linha" style="display:flex;justify-content:space-between;gap:1rem;border-top:1px solid var(--line);padding-top:.9rem;margin-top:.6rem">
+          <span>Administrador</span><b>${NUVEM.logado() ? 'conectado' : 'não conectado'}</b></div>` : ''}
+        ${m === 'nuvem' ? `<div class="btnrow" style="margin-top:1rem">
+            <button class="btn-s" id="nv-recarregar">Recarregar da nuvem</button>
+            <button class="btn-s btn-s--danger" id="nv-sair">Sair da conta</button>
+          </div>` : ''}
+      </div>
+
+      <div class="card">
+        <h3>Conectar a nuvem (Supabase)</h3>
+        <p class="hint">Crie um projeto gratuito no Supabase, rode o script <b>dados/supabase.sql</b> que veio junto do site e cole abaixo o endereço do projeto e a chave pública (anon). O passo a passo completo está no README.</p>
+        <div class="grid2">
+          <div class="fld span2"><label>Endereço do projeto</label><input class="inp" id="nv-url" placeholder="https://xxxxxxxx.supabase.co" value="${esc(n ? n.url : '')}"></div>
+          <div class="fld span2"><label>Chave pública (anon)</label><input class="inp" id="nv-key" placeholder="eyJhbGciOi..." value="${esc(n ? n.anonKey : '')}"></div>
+          <div class="fld"><label>Pasta das fotos (bucket)</label><input class="inp" id="nv-bucket" value="${esc(n ? n.bucket : 'fotos')}"></div>
+        </div>
+        <div class="btnrow" style="margin-top:1.1rem">
+          <button class="btn-s btn-s--ink" id="nv-salvar">Salvar e conectar</button>
+          <button class="btn-s" id="nv-testar">Testar conexão</button>
+          <button class="btn-s" id="nv-gerar">Gerar nuvem.js do site</button>
+        </div>
+        <p class="hint" style="margin-top:1rem">${fixo
+          ? 'O site já carrega estes dados do arquivo <b>dados/nuvem.js</b>, então vale para todos os visitantes.'
+          : 'Depois de conectar, clique em <b>Gerar nuvem.js do site</b> e coloque o arquivo baixado na pasta <b>dados/</b> da hospedagem — é isso que faz todos os visitantes lerem o mesmo banco.'}</p>
+        <p class="hint">A chave anon é pública por natureza: ela só permite <b>ler</b>. Gravar exige o login de administrador, feito pelo Supabase.</p>
+      </div>`;
   },
 
   painelDados(){
@@ -1478,7 +1657,8 @@ const Admin = {
     if (!el) return;
     el.innerHTML = txt || (this.dirty
       ? '<b>Alterações não salvas.</b> Clique em salvar para publicar no site.'
-      : 'Tudo salvo. ' + (Store.modo === 'db' ? 'Visível para todo mundo.' : 'Salvo neste navegador.'));
+      : 'Tudo salvo. ' + (Store.modo === 'nuvem' ? 'Publicado na nuvem, visível para todos.'
+          : Store.modo === 'db' ? 'Visível para todo mundo.' : 'Salvo apenas neste navegador.'));
   },
 
   async salvar(){
@@ -1799,11 +1979,61 @@ function eventos(){
 
     if (t.closest && t.closest('#lock-go')){
       const pin = $('#lock-pin').value;
+      if (Store.modo === 'nuvem'){
+        const email = $('#lock-email').value.trim();
+        if (!email || !pin){ toast('Informe e-mail e senha.'); return; }
+        toast('Entrando…');
+        try{
+          await NUVEM.entrar(email, pin);
+          Store.podeEditar = true;
+          Admin.liberado = true;
+          await Store.recarregar();
+          Admin.draft = clone(Store.data);
+          Admin.entrar();
+          renderTudo();
+          toast('Conectado. Suas alterações valem para todos.');
+        }catch(err){ toast(err.message || 'Não consegui entrar.'); }
+        return;
+      }
       if (pin && pin === (D().admin.senha || 'lamour2026')){
         sessionStorage.setItem('lamour.admin', '1');
         Admin.liberado = true;
         Admin.entrar();
       } else toast('Senha incorreta.');
+      return;
+    }
+
+    /* ---- conexão com a nuvem ---- */
+    if (t.closest && t.closest('#nv-salvar')){
+      const cfg = { url:$('#nv-url').value.trim().replace(/\/+$/, ''), anonKey:$('#nv-key').value.trim(), bucket:($('#nv-bucket').value.trim() || 'fotos') };
+      if (!cfg.url || !cfg.anonKey){ toast('Preencha o endereço e a chave.'); return; }
+      localStorage.setItem('lamour.nuvem', JSON.stringify(cfg));
+      toast('Conectando…');
+      Store.erroNuvem = null;
+      await Store.initNuvem();
+      Admin.draft = clone(Store.data);
+      renderTudo();
+      Admin.entrar();
+      toast(Store.modo === 'nuvem' ? 'Nuvem conectada. Entre com o e-mail do administrador para gravar.' : 'Não consegui conectar. Confira o endereço e a chave.');
+      return;
+    }
+    if (t.closest && t.closest('#nv-testar')){
+      try{ await NUVEM.testar(); toast('Conexão funcionando.'); }
+      catch(err){ toast('Falhou: ' + (err.message || 'erro')); }
+      return;
+    }
+    if (t.closest && t.closest('#nv-gerar')){
+      const n = NUVEM.cfg();
+      if (!n){ toast('Salve a conexão primeiro.'); return; }
+      baixarArquivo('nuvem.js',
+        '/* Conexão da loja com a nuvem — coloque este arquivo em dados/nuvem.js */\n' +
+        'window.LAMOUR_NUVEM = ' + JSON.stringify(n, null, 2) + ';\n', 'text/javascript');
+      return;
+    }
+    if (t.closest && t.closest('#nv-recarregar')){ await Store.recarregar(); Admin.draft = clone(Store.data); renderTudo(); Admin.render(); toast('Conteúdo recarregado da nuvem.'); return; }
+    if (t.closest && t.closest('#nv-sair')){
+      NUVEM.sair(); Store.podeEditar = false; Admin.liberado = false; Admin.draft = null;
+      Admin.entrar(); toast('Você saiu da conta de administrador.');
       return;
     }
 
@@ -1955,21 +2185,25 @@ function eventos(){
 }
 
 /* ---------- dados ---------- */
+async function baixarArquivo(nome, texto, tipo){
+  try{
+    const dl = (typeof window.claude !== 'undefined' && window.claude.use) ? await window.claude.use('downloads') : null;
+    if (dl){ await dl.save({ filename:nome, data:texto }); toast('Arquivo gerado.'); return; }
+  }catch(e){ /* segue para o método comum */ }
+  const a = document.createElement('a');
+  const url = URL.createObjectURL(new Blob([texto], { type:tipo || 'application/json' }));
+  a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast('Arquivo gerado.');
+}
+
 async function exportarDados(comoJs){
   const pacote = { versao:1, exportadoEm:new Date().toISOString(), config:Admin.draft || Store.data, produtos:Store.produtos };
   const txt = comoJs
     ? '/* Conteúdo publicado do site — gerado pelo painel. */\nwindow.LAMOUR_CONTEUDO = ' + JSON.stringify(pacote, null, 2) + ';\n'
     : JSON.stringify(pacote, null, 2);
   const nome = comoJs ? 'conteudo.js' : 'lamour-conteudo.json';
-  try{
-    const dl = (typeof window.claude !== 'undefined' && window.claude.use) ? await window.claude.use('downloads') : null;
-    if (dl){ await dl.save({ filename:nome, data:txt }); toast('Arquivo gerado.'); return; }
-  }catch(e){ /* segue para o método comum */ }
-  const a = document.createElement('a');
-  const url = URL.createObjectURL(new Blob([txt], { type:'application/json' }));
-  a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-  toast('Arquivo gerado.');
+  await baixarArquivo(nome, txt, comoJs ? 'text/javascript' : 'application/json');
 }
 
 function importarDados(){

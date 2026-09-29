@@ -1,4 +1,4 @@
-/* Conteúdo publicado do site.
-   Gere no painel: Administrador -> Dados -> "Gerar conteudo.js do site"
-   e substitua este arquivo pelo que foi baixado. */
+/* Conteúdo do site sem nuvem (opcional).
+   Gere no painel: Administrador -> Dados -> "Gerar conteudo.js do site".
+   Se você conectou a nuvem, este arquivo não é necessário. */
 // window.LAMOUR_CONTEUDO = { config: {...}, produtos: [...] };

@@ -12,7 +12,7 @@
    provedor: "firebase",
    projectId: "loja-lamour",
    apiKey: "AIzaSyCI4xlEAv2gCZRVWkJelYMQz4-xtjM23jc",
-   storageBucket: "loja-lamour.firebasestorage.app"   // opcional (exige plano Blaze)
+//   storageBucket: "loja-lamour.firebasestorage.app"   // opcional (exige plano Blaze)
  };
 
 /* ---------- OPÇÃO B — Supabase (Postgres) ----------
